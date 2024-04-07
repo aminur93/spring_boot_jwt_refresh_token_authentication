@@ -13,6 +13,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
@@ -32,6 +33,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             @NonNull FilterChain filterChain)
             throws ServletException, IOException
     {
+        String token = extractTokenFromRequest(request);
+
         final String authHeader = request.getHeader("Authorization");
 
         final String jwt;
@@ -50,7 +53,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         if (userEmail != null  && SecurityContextHolder.getContext().getAuthentication() == null)
         {
-            if (TokenBlackList.isBlacklisted(jwt))
+
+            if (TokenBlackList.isBlacklisted(token))
             {
                 filterChain.doFilter(request, response);
                 return;
@@ -58,7 +62,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
 
-            if (jwtService.isTokenValid(jwt, userDetails))
+            if (jwtService.isTokenValid(jwt, userDetails) && !TokenBlackList.isBlacklisted(token))
             {
                 UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                         userDetails,
@@ -75,5 +79,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             filterChain.doFilter(request, response);
         }
+    }
+
+    public String extractTokenFromRequest(HttpServletRequest request){
+        // Get the Authorization header from the request
+        String authorizationHeader = request.getHeader("Authorization");
+
+        // Check if the Authorization header is not null and starts with "Bearer "
+        if (StringUtils.hasText(authorizationHeader) && authorizationHeader.startsWith("Bearer ")) {
+            // Extract the JWT token (remove "Bearer " prefix)
+            return authorizationHeader.substring(7);
+        }
+
+        // If the Authorization header is not valid, return null
+        return null;
     }
 }
