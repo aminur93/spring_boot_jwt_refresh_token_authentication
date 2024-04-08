@@ -44,11 +44,28 @@ public class User implements UserDetails {
     @Enumerated(EnumType.STRING)
     private Role role;
 
+    @OneToMany(mappedBy = "user")
+    private List<Token> tokens;
+
     @Column(name = "created_at", columnDefinition = "TIMESTAMP", nullable = true)
     private LocalDateTime createdAt;
 
     @Column(name = "updated_at", columnDefinition = "TIMESTAMP", nullable = true)
     private LocalDateTime updatedAt;
+
+    @PrePersist
+    protected void onCreate()
+    {
+        createdAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    protected void onUpdate()
+    {
+        updatedAt = LocalDateTime.now();
+    }
+
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {

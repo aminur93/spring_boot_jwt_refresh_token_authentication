@@ -1,5 +1,6 @@
 package com.aminurdev.jwt.webapp.config;
 
+import com.aminurdev.jwt.domain.repository.TokenRepository;
 import com.aminurdev.jwt.service.JwtService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -26,6 +27,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final UserDetailsService userDetailsService;
 
+    private final TokenRepository tokenRepository;
+
     @Override
     protected void doFilterInternal(
             @NonNull HttpServletRequest request,
@@ -33,7 +36,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             @NonNull FilterChain filterChain)
             throws ServletException, IOException
     {
-        String token = extractTokenFromRequest(request);
 
         final String authHeader = request.getHeader("Authorization");
 
@@ -54,15 +56,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (userEmail != null  && SecurityContextHolder.getContext().getAuthentication() == null)
         {
 
-            if (TokenBlackList.isBlacklisted(token))
-            {
-                filterChain.doFilter(request, response);
-                return;
-            }
-
             UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
 
-            if (jwtService.isTokenValid(jwt, userDetails) && !TokenBlackList.isBlacklisted(token))
+            var isTokenValid = tokenRepository.findByToken(jwt)
+                    .map(t -> t.getExpired() == 0  && t.getRevoked() == 0)
+                    .orElse(false);
+
+            if (jwtService.isTokenValid(jwt, userDetails) && isTokenValid)
             {
                 UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                         userDetails,
@@ -79,19 +79,5 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             filterChain.doFilter(request, response);
         }
-    }
-
-    public String extractTokenFromRequest(HttpServletRequest request){
-        // Get the Authorization header from the request
-        String authorizationHeader = request.getHeader("Authorization");
-
-        // Check if the Authorization header is not null and starts with "Bearer "
-        if (StringUtils.hasText(authorizationHeader) && authorizationHeader.startsWith("Bearer ")) {
-            // Extract the JWT token (remove "Bearer " prefix)
-            return authorizationHeader.substring(7);
-        }
-
-        // If the Authorization header is not valid, return null
-        return null;
     }
 }

@@ -1,8 +1,11 @@
 package com.aminurdev.jwt.service;
 
+import com.aminurdev.jwt.domain.entity.Token;
+import com.aminurdev.jwt.domain.entity.TokenType;
 import com.aminurdev.jwt.domain.entity.User;
 import com.aminurdev.jwt.domain.model.TokenRequest;
 import com.aminurdev.jwt.domain.model.UserRequest;
+import com.aminurdev.jwt.domain.repository.TokenRepository;
 import com.aminurdev.jwt.domain.repository.UserRepository;
 import com.aminurdev.jwt.response.AuthResponse;
 import lombok.RequiredArgsConstructor;
@@ -13,13 +16,14 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
-import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
 public class AuthService {
 
     private final UserRepository userRepository;
+
+    private final TokenRepository tokenRepository;
 
     private final PasswordEncoder passwordEncoder;
 
@@ -82,6 +86,10 @@ public class AuthService {
 
             String jwtToken = jwtService.generateToken(user);
 
+            revokedAllUserTokens(user);
+
+            saveUserToken(user, jwtToken);
+
             String refreshToken = jwtService.generateRefreshToken(new HashMap<>(), user);
 
             if (user.getId() > 0)
@@ -121,7 +129,13 @@ public class AuthService {
             User user = userRepository.findByEmail(userEmail).orElseThrow(() -> new RuntimeException("User not found"));
 
             if (jwtService.isTokenValid(tokenRequest.getRefreshToken(), user)) {
+
                 var jwt = jwtService.generateToken(user);
+
+                revokedAllUserTokens(user);
+
+                saveUserToken(user, jwt);
+
                 response.setStatusCode(200);
                 response.setToken(jwt);
                 response.setRefreshToken(tokenRequest.getRefreshToken());
@@ -135,5 +149,35 @@ public class AuthService {
         }
 
         return  response;
+    }
+
+    private void revokedAllUserTokens(User user)
+    {
+        var validUserTokens = tokenRepository.findAllValidTokensByUser(user.getId());
+
+        if ((validUserTokens.isEmpty()))
+        {
+            return;
+        }
+
+        validUserTokens.forEach(t -> {
+            t.setExpired(1);
+            t.setRevoked(1);
+        });
+
+        tokenRepository.saveAll(validUserTokens);
+    }
+
+    public void saveUserToken(User user, String jwtToken)
+    {
+        Token token = new Token();
+
+        token.setUser(user);
+        token.setToken(jwtToken);
+        token.setTokenType(TokenType.BEARER);
+        token.setExpired(0);
+        token.setRevoked(0);
+
+        tokenRepository.save(token);
     }
 }
